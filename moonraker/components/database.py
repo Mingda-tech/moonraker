@@ -230,6 +230,12 @@ class MoonrakerDatabase:
         self.server.register_debug_endpoint(
             "/debug/database/item", RequestType.all(), self._handle_item_request
         )
+        self.server.register_debug_endpoint(
+            "/debug/database/table", RequestType.GET, self._handle_table_request
+        )
+        self.server.register_debug_endpoint(
+            "/debug/database/row", RequestType.all(), self._handle_row_request
+        )
 
     async def component_init(self) -> None:
         await self.db_provider.async_init()
@@ -549,6 +555,69 @@ class MoonrakerDatabase:
         # Stop command thread
         await self.db_provider.stop()
 
+    async def _handle_table_request(self, web_request: WebRequest) -> Dict[str, Any]:
+        table = web_request.get_str("table")
+        if table not in self.db_provider.tables:
+            raise self.server.error(f"Table name '{table}' does not exist", 404)
+        cur = await self.sql_execute(f"SELECT rowid, * FROM {table}")
+        return {
+            "table_name": table,
+            "rows": [dict(r) for r in await cur.fetchall()]
+        }
+
+    async def _handle_row_request(self, web_request: WebRequest) -> Dict[str, Any]:
+        req_type = web_request.get_request_type()
+        table = web_request.get_str("table")
+        if table not in self.registered_tables:
+            raise self.server.error(
+                f"Table name '{table}' is not a registered table", 404
+            )
+        if req_type == RequestType.POST:
+            row_id = web_request.get_int("row_id", None)
+            values = web_request.get("values")
+            assert isinstance(values, dict)
+            keys = set(values.keys())
+            cur = await self.sql_execute(f"PRAGMA table_info('{table}')")
+            columns = set([r["name"] for r in await cur.fetchall()])
+            if row_id is None:
+                # insert
+                if keys != columns:
+                    raise self.server.error(
+                        "Keys in value to insert do not match columns of tables"
+                    )
+                val_str = ",".join([f":{col}" for col in columns])
+                cur = await self.sql_execute(
+                    f"INSERT INTO {table} VALUES({val_str})", values
+                )
+            else:
+                # update
+                if not keys.issubset(columns):
+                    raise self.server.error(
+                        "Keys in value to update are not a subset of available columns"
+                    )
+                col_str = ",".join([f"{col}" for col in columns if col in keys])
+                vals = [values[col] for col in columns if col in keys]
+                vals.append(row_id)
+                val_str = ",".join("?" * len(vals))
+                cur = await self.sql_execute(
+                    f"UPDATE {table} SET ({col_str}) = ({val_str}) WHERE rowid = ?",
+                    vals
+                )
+                if not cur.rowcount:
+                    raise self.server.error(f"No row with id {row_id} to update")
+        else:
+            row_id = web_request.get_int("row_id")
+        cur = await self.sql_execute(
+            f"SELECT rowid, * FROM {table} WHERE rowid = ?", (row_id,)
+        )
+        item = dict(await cur.fetchone() or {})
+        if req_type == RequestType.DELETE:
+            await self.sql_execute(
+                f"DELETE FROM {table} WHERE rowid = ?", (row_id,)
+            )
+        return {
+            "row": item
+        }
 
 class SqliteProvider(Thread):
     def __init__(self, config: ConfigHelper, db_path: pathlib.Path) -> None:
