@@ -19,7 +19,7 @@ jobs:
       uses: actions/checkout@v2
       with:
         fetch-depth: 0
-        repository: Klipper3d/klipper
+        repository: Mingda-tech/klipper
         path: klipper
 
     - name: Build Beta Assets

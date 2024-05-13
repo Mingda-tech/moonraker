@@ -43,7 +43,7 @@ from typing import (
 if TYPE_CHECKING:
     from inotify_simple import Event as InotifyEvent
     from ...confighelper import ConfigHelper
-    from ...common import WebRequest, UserInfo
+    from ...common import WebRequest
     from ..klippy_connection import KlippyConnection
     from ..job_queue import JobQueue
     from ..job_state import JobState
@@ -615,8 +615,6 @@ class FileManager:
                     ):
                         action = "modify_file"
                     op_func = shutil.copy2
-            else:
-                raise self.server.error(f"Invalid endpoint {ep}")
             self.sync_lock.setup(action, dest_path, move_copy=True)
             try:
                 full_dest = await self.event_loop.run_in_thread(
@@ -904,7 +902,7 @@ class FileManager:
         started: bool = False
         queued: bool = False
         if upload_info['start_print']:
-            user: Optional[UserInfo] = upload_info.get("user")
+            user: Optional[Dict[str, Any]] = upload_info.get("user")
             if can_start:
                 kapis: APIComp = self.server.lookup_component('klippy_apis')
                 try:
@@ -1963,7 +1961,7 @@ class InotifyObserver(BaseFileSystemObserver):
     def _handle_move_timeout(self, cookie: int, is_dir: bool):
         if cookie not in self.pending_moves:
             return
-        parent_node, name, _ = self.pending_moves.pop(cookie)
+        parent_node, name, hdl = self.pending_moves.pop(cookie)
         item_path = os.path.join(parent_node.get_path(), name)
         root = parent_node.get_root()
         self.clear_metadata(root, item_path, is_dir)

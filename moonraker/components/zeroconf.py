@@ -181,11 +181,11 @@ SSDP_DEVICE_XML = """
         <deviceType>{device_type}</deviceType>
         <friendlyName>{friendly_name}</friendlyName>
         <manufacturer>Arksine</manufacturer>
-        <manufacturerURL>https://github.com/Arksine/moonraker</manufacturerURL>
+        <manufacturerURL>https://github.com/Mingda-tech/moonraker</manufacturerURL>
         <modelDescription>API Server for Klipper</modelDescription>
         <modelName>Moonraker</modelName>
         <modelNumber>{model_number}</modelNumber>
-        <modelURL>https://github.com/Arksine/moonraker</modelURL>
+        <modelURL>https://github.com/Mingda-tech/moonraker</modelURL>
         <serialNumber>{serial_number}</serialNumber>
         <UDN>uuid:{device_uuid}</UDN>
         <presentationURL>{presentation_url}</presentationURL>

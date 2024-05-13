@@ -56,7 +56,6 @@ if TYPE_CHECKING:
     from ..server import Server
     from ..eventloop import EventLoop
     from ..confighelper import ConfigHelper
-    from ..common import UserInfo
     from .klippy_connection import KlippyConnection as Klippy
     from ..utils import IPAddress
     from .websockets import WebsocketManager, WebSocket
@@ -161,10 +160,10 @@ class PrimaryRouter(MutableRouter):
         else:
             log_method = access_log.error
         request_time = 1000.0 * handler.request.request_time()
-        user: Optional[UserInfo] = handler.current_user
+        user = handler.current_user
         username = "No User"
-        if user is not None:
-            username = user.username
+        if user is not None and 'username' in user:
+            username = user['username']
         log_method(
             f"{status_code} {handler._request_summary()} "
             f"[{username}] {request_time:.2f}ms"
@@ -726,7 +725,7 @@ class RPCHandler(AuthorizedRequestHandler, APITransport):
         return TransportType.HTTP
 
     @property
-    def user_info(self) -> Optional[UserInfo]:
+    def user_info(self) -> Optional[Dict[str, Any]]:
         return self.current_user
 
     @property

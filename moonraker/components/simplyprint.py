@@ -17,7 +17,7 @@ import logging.handlers
 import tempfile
 from queue import SimpleQueue
 from ..loghelper import LocalQueueHandler
-from ..common import APITransport, JobEvent, KlippyState, UserInfo
+from ..common import APITransport, JobEvent, KlippyState
 from ..utils import json_wrapper as jsonw
 
 from typing import (
@@ -1014,7 +1014,7 @@ class SimplyPrint(APITransport):
             "firmware": "Klipper",
             "firmware_version": version,
             "firmware_date": firmware_date,
-            "firmware_link": "https://github.com/Klipper3d/klipper",
+            "firmware_link": "https://github.com/Mingda-tech/klipper",
         }
         diff = self._get_object_diff(fw_info, self.cache.firmware_info)
         if diff:
@@ -1493,7 +1493,6 @@ class PrintHandler:
         self.download_progress: int = -1
         self.pending_file: str = ""
         self.last_started: str = ""
-        self.sp_user = UserInfo("SimplyPrint", "")
 
     def download_file(self, url: str, start: bool):
         coro = self._download_sp_file(url, start)
@@ -1599,7 +1598,7 @@ class PrintHandler:
         kapi: KlippyAPI = self.server.lookup_component("klippy_apis")
         data = {"state": "started"}
         try:
-            await kapi.start_print(pending, user=self.sp_user)
+            await kapi.start_print(pending, user={"username": "SimplyPrint"})
         except Exception:
             logging.exception("Print Failed to start")
             data["state"] = "error"

@@ -9,10 +9,8 @@ import sys
 import logging
 import copy
 import re
-import inspect
-import dataclasses
-import time
 from enum import Enum, Flag, auto
+from dataclasses import dataclass
 from abc import ABCMeta, abstractmethod
 from .utils import ServerError, Sentinel
 from .utils import json_wrapper as jsonw
@@ -40,7 +38,6 @@ if TYPE_CHECKING:
     from .components.websockets import WebsocketManager
     from .components.authorization import Authorization
     from .components.history import History
-    from .components.database import DBProviderWrapper
     from .utils import IPAddress
     from asyncio import Future
     _C = TypeVar("_C", str, bool, float, int)
@@ -178,24 +175,7 @@ class RenderableTemplate(metaclass=ABCMeta):
     async def render_async(self, context: Dict[str, Any] = {}) -> str:
         ...
 
-@dataclasses.dataclass
-class UserInfo:
-    username: str
-    password: str
-    created_on: float = dataclasses.field(default_factory=time.time)
-    salt: str = ""
-    source: str = "moonraker"
-    jwt_secret: Optional[str] = None
-    jwk_id: Optional[str] = None
-    groups: List[str] = dataclasses.field(default_factory=lambda: ["admin"])
-
-    def as_tuple(self) -> Tuple[Any, ...]:
-        return dataclasses.astuple(self)
-
-    def as_dict(self) -> Dict[str, Any]:
-        return dataclasses.asdict(self)
-
-@dataclasses.dataclass(frozen=True)
+@dataclass(frozen=True)
 class APIDefinition:
     endpoint: str
     http_path: str
@@ -224,7 +204,7 @@ class APIDefinition:
         request_type: RequestType,
         transport: Optional[APITransport] = None,
         ip_addr: Optional[IPAddress] = None,
-        user: Optional[UserInfo] = None
+        user: Optional[Dict[str, Any]] = None
     ) -> Coroutine:
         return self.callback(
             WebRequest(self.endpoint, args, request_type, transport, ip_addr, user)
@@ -313,7 +293,7 @@ class APITransport:
         return TransportType.INTERNAL
 
     @property
-    def user_info(self) -> Optional[UserInfo]:
+    def user_info(self) -> Optional[Dict[str, Any]]:
         return None
 
     @property
@@ -350,14 +330,14 @@ class BaseRemoteConnection(APITransport):
             "url": ""
         }
         self._need_auth: bool = False
-        self._user_info: Optional[UserInfo] = None
+        self._user_info: Optional[Dict[str, Any]] = None
 
     @property
-    def user_info(self) -> Optional[UserInfo]:
+    def user_info(self) -> Optional[Dict[str, Any]]:
         return self._user_info
 
     @user_info.setter
-    def user_info(self, uinfo: UserInfo) -> None:
+    def user_info(self, uinfo: Dict[str, Any]) -> None:
         self._user_info = uinfo
         self._need_auth = False
 
@@ -443,7 +423,7 @@ class BaseRemoteConnection(APITransport):
     def on_user_logout(self, user: str) -> bool:
         if self._user_info is None:
             return False
-        if user == self._user_info.username:
+        if user == self._user_info.get("username", ""):
             self._user_info = None
             return True
         return False
@@ -529,7 +509,7 @@ class WebRequest:
         request_type: RequestType = RequestType(0),
         transport: Optional[APITransport] = None,
         ip_addr: Optional[IPAddress] = None,
-        user: Optional[UserInfo] = None
+        user: Optional[Dict[str, Any]] = None
     ) -> None:
         self.endpoint = endpoint
         self.args = args
@@ -561,7 +541,7 @@ class WebRequest:
     def get_ip_address(self) -> Optional[IPAddress]:
         return self.ip_addr
 
-    def get_current_user(self) -> Optional[UserInfo]:
+    def get_current_user(self) -> Optional[Dict[str, Any]]:
         return self.current_user
 
     def _get_converted_arg(self,
@@ -1240,49 +1220,3 @@ class HistoryFieldData:
             "maximum": maximum,
             "total": total
         }
-
-class SqlTableDefType(type):
-    def __new__(
-        metacls,
-        clsname: str,
-        bases: Tuple[type, ...],
-        cls_attrs: Dict[str, Any]
-    ):
-        if clsname != "SqlTableDefinition":
-            for item in ("name", "prototype"):
-                if not cls_attrs[item]:
-                    raise ValueError(
-                        f"Class attribute `{item}` must be set for class {clsname}"
-                    )
-            if cls_attrs["version"] < 1:
-                raise ValueError(
-                    f"The 'version' attribute of {clsname} must be greater than 0"
-                )
-            cls_attrs["prototype"] = inspect.cleandoc(cls_attrs["prototype"].strip())
-            prototype = cls_attrs["prototype"]
-            proto_match = re.match(
-                r"([a-zA-Z][0-9a-zA-Z_-]+)\s*\((.+)\)\s*;?$", prototype, re.DOTALL
-            )
-            if proto_match is None:
-                raise ValueError(f"Invalid SQL Table prototype:\n{prototype}")
-            table_name = cls_attrs["name"]
-            parsed_name = proto_match.group(1)
-            if table_name != parsed_name:
-                raise ValueError(
-                    f"Table name '{table_name}' does not match parsed name from "
-                    f"table prototype '{parsed_name}'"
-                )
-        return super().__new__(metacls, clsname, bases, cls_attrs)
-
-class SqlTableDefinition(metaclass=SqlTableDefType):
-    name: str = ""
-    version: int = 0
-    prototype: str = ""
-    def __init__(self) -> None:
-        if self.__class__ == SqlTableDefinition:
-            raise ServerError("Cannot directly instantiate SqlTableDefinition")
-
-    def migrate(
-        self, last_version: int, db_provider: DBProviderWrapper
-    ) -> None:
-        raise NotImplementedError("Children must implement migrate")
